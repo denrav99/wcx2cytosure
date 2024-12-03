@@ -8,6 +8,7 @@ import pandas as pd
 import logging
 import gzip
 import numpy as np
+import os
 from collections import namedtuple, defaultdict
 from io import StringIO
 from lxml import etree
@@ -21,49 +22,81 @@ logger = logging.getLogger(__name__)
 
 Event = namedtuple('Event', ['chrom', 'start', 'end', 'type', 'info'])
 
-def events(variants, CONTIG_LENGTHS):
-	"""Iterate over variants and yield Events"""
+#def events(variants, CONTIG_LENGTHS):
+#	"""Iterate over variants and yield Events"""
+#
+#	for variant in variants:
+#		if len(variant.ALT) != 1:
+#			continue
+#		chrom = variant.CHROM
+#		if chrom not in CONTIG_LENGTHS:
+#			continue
+#		start = variant.start
+#		sv_type = variant.INFO.get('SVTYPE').split(':')[0]
+#		if variant.INFO.get("END"):
+#			end = variant.INFO.get('END')
+#			if start >= end:
+#				tmp=int(end)
+#				end=start
+#				start=tmp
+#
+#			logger.debug('%s at %s:%s-%s (%s bp)', sv_type, chrom, start+1, end, end - start)
+#			assert len(variant.REF) == 1
+#
+#			yield Event(chrom=chrom, start=start, end=end, type=sv_type, info=dict(variant.INFO))
+#		else:
+#
+#			if ":" in variant.ALT[0] and ("[" in  variant.ALT[0] or "]" in  variant.ALT[0]):
+#				chrom2=variant.ALT[0].split(":")[0].split("[")[-1].split("]")[-1]
+#			else:
+#
+#				print ("invalid variant  type {}: skipping".format(variant.ALT[0]))
+#
+#			if chrom2 != chrom:
+#				logger.debug('%s at %s:%s', sv_type, chrom, start+1)
+#				yield Event( chrom=chrom, start=start, end=None, type=sv_type, info=dict(variant.INFO) )
+#
+#			else:
+#				end=int(variant.ALT[0].split(":")[1].split("[")[0].split("]")[0])
+#				if start >= end:
+#					tmp=int(end)
+#					end=start
+#					start=tmp
+#
+#				logger.debug('%s at %s:%s', sv_type, chrom, start+1)
+#				yield Event( chrom=chrom, start=start, end=end, type=sv_type, info=dict(variant.INFO) )
 
-	for variant in variants:
-		if len(variant.ALT) != 1:
+def wisecondorx_events(args, CONTIG_LENGTHS):
+
+	variants  = pd.read_csv(args.wisecondorx_aberrations, sep="\t", header = 0)
+	skipped = 0
+	
+	for _, variant in variants.iterrows():
+		chrom = str(variant["chr"])
+		if (chrom) not in CONTIG_LENGTHS:
 			continue
-		chrom = variant.CHROM
-		if chrom not in CONTIG_LENGTHS:
-			continue
-		start = variant.start
-		sv_type = variant.INFO.get('SVTYPE').split(':')[0]
-		if variant.INFO.get("END"):
-			end = variant.INFO.get('END')
-			if start >= end:
-				tmp=int(end)
-				end=start
-				start=tmp
 
-			logger.debug('%s at %s:%s-%s (%s bp)', sv_type, chrom, start+1, end, end - start)
-			assert len(variant.REF) == 1
+		start = int(variant["start"])
+		end = int(variant["end"])
+		sv_type =str(variant["type"])
+		
+		if sv_type=='loss':
+			sv_type='DEL'
+		elif sv_type=='gain':
+			sv_type='DUP'
 
-			yield Event(chrom=chrom, start=start, end=end, type=sv_type, info=dict(variant.INFO))
-		else:
+		if args.wcx_size:
+			variant_size = (end-start)
+			if variant_size <= args.wcx_size:
+				#Too short
+				skipped += 1
+				logger.debug(f'skipped variant start={start},end={end},type= {sv_type} for being too short. Size of skipped variant={variant_size}bp')
+				logger.info(f'skipped {skipped} variants for being too short') 
+				continue		
+				
+		logger.debug('%s at %s:%s-%s (%s bp), Total skipped due to size: %s', sv_type, chrom, start+1, end, end - start, skipped)
+		yield Event(chrom=chrom, start=start, end=end, type=sv_type, info={})
 
-			if ":" in variant.ALT[0] and ("[" in  variant.ALT[0] or "]" in  variant.ALT[0]):
-				chrom2=variant.ALT[0].split(":")[0].split("[")[-1].split("]")[-1]
-			else:
-
-				print ("invalid variant  type {}: skipping".format(variant.ALT[0]))
-
-			if chrom2 != chrom:
-				logger.debug('%s at %s:%s', sv_type, chrom, start+1)
-				yield Event( chrom=chrom, start=start, end=None, type=sv_type, info=dict(variant.INFO) )
-
-			else:
-				end=int(variant.ALT[0].split(":")[1].split("[")[0].split("]")[0])
-				if start >= end:
-					tmp=int(end)
-					end=start
-					start=tmp
-
-				logger.debug('%s at %s:%s', sv_type, chrom, start+1)
-				yield Event( chrom=chrom, start=start, end=end, type=sv_type, info=dict(variant.INFO) )
 
 def strip_template(path):
 	"""
@@ -278,20 +311,20 @@ class CoverageRecord:
 		self.coverage = coverage
 
 
-def parse_coverages(path):
-	with open(path) as f:
-		for line in f:
-			if line.startswith('#'):
-				continue
-			content=line.split('\t')
-			chrom=content[0]
-			start=content[1]
-			end=content[2]
-			coverage=content[3]
-			start = int(start)
-			end = int(end)
-			coverage = float(coverage)
-			yield CoverageRecord(chrom, start, end, coverage)
+#def parse_coverages(path):
+#	with open(path) as f:
+#		for line in f:
+#			if line.startswith('#'):
+#				continue
+#			content=line.split('\t')
+#			chrom=content[0]
+#			start=content[1]
+#			end=content[2]
+#			coverage=content[3]
+#			start = int(start)
+#			end = int(end)
+#			coverage = float(coverage)
+#			yield CoverageRecord(chrom, start, end, coverage)
 
 def retrieve_snp(content,args):
 	snp_data=[]
@@ -301,50 +334,68 @@ def retrieve_snp(content,args):
 
 	return (snp_data)
 
-def parse_cn_coverages(args):
+def parse_wisecondorx_coverages(args):
 	probe_data=[]
 	opener=open
 	first=True
-	df = pd.read_csv(args.cn, sep="\t")
-	for i in range(0,len(df["log2"])):
+	df = pd.read_csv(args.wisecondorx_cov, sep="\t", header=0)
+	
+	for _, row in df.iterrows():
 
-		chrom = df["chromosome"][i]
-		start = int(df["start"][i])
-		end = int(df["end"][i])
-		coverage =float(df["log2"][i])
-
-		if "gene" in df:
-			if df["gene"][i] == "Antitarget":
-				continue
+		chrom = row["chr"]
+		start = int(row["start"])
+		end = int(row["end"])
+		coverage =float(row["ratio"])
+		
+		if pd.isna(coverage):
+			continue	
 
 		yield CoverageRecord(chrom, start, end, coverage)
 
+#def parse_cn_coverages(args):
+#	probe_data=[]
+#	opener=open
+#	first=True
+#	df = pd.read_csv(args.cn, sep="\t")
+#	for i in range(0,len(df["log2"])):
 
-def parse_snv_coverages(args):
-		snv_list=[]
-		if args.snv.endswith(".gz"):
-			for line  in gzip.open(args.snv):
-				if line[0] == "#" or not ";{}=".format(args.dp) in line:
-					continue
-				content=line.strip().split()
-				snv_list.append(retrieve_snp(content,args))
+#		chrom = df["chromosome"][i]
+#		start = int(df["start"][i])
+#		end = int(df["end"][i])
+#		coverage =float(df["log2"][i])
+#
+#		if "gene" in df:
+#			if df["gene"][i] == "Antitarget":
+#				continue
+#
+#		yield CoverageRecord(chrom, start, end, coverage)
 
-		elif args.snv.endswith(".vcf"):
-			for line in open(args.snv):
-				if line[0] == "#" or not ";{}=".format(args.dp) in line:
-					continue
-				content=line.strip().split()
-				snv_list.append(retrieve_snp(content,args))
 
-		else:
-			print ("only .vcf or gziped vcf is allowed, exiting")
-
-		for snv in snv_list:
-			chrom = snv[0]
-			start = snv[1]
-			end = start+1
-			coverage = snv[2]
-			yield CoverageRecord(chrom, start, end, coverage)
+#def parse_snv_coverages(args):
+#		snv_list=[]
+#		if args.snv.endswith(".gz"):
+#			for line  in gzip.open(args.snv):
+#				if line[0] == "#" or not ";{}=".format(args.dp) in line:
+#					continue
+#				content=line.strip().split()
+#				snv_list.append(retrieve_snp(content,args))
+#
+#		elif args.snv.endswith(".vcf"):
+#			for line in open(args.snv):
+#				if line[0] == "#" or not ";{}=".format(args.dp) in line:
+#					continue
+#				content=line.strip().split()
+#				snv_list.append(retrieve_snp(content,args))
+#
+#		else:
+#			print ("only .vcf or gziped vcf is allowed, exiting")
+#
+#		for snv in snv_list:
+#			chrom = snv[0]
+#			start = snv[1]
+#			end = start+1
+#			coverage = snv[2]
+#			yield CoverageRecord(chrom, start, end, coverage)
 
 
 def group_by_chromosome(records):
@@ -381,22 +432,22 @@ def bin_coverages(coverages, n):
 		yield CoverageRecord(chrom,	records[0].start, records[-1].end, cov)
 
 
-def subtract_intervals(records, intervals):
-	"""
-	Yield only those records that fall outside of the given intervals.
-	"""
-	events = [(r.start, 'rec', r) for r in records]
-	events.extend((i[0], 'istart', None) for i in intervals)
-	events.extend((i[1], 'iend', None) for i in intervals)
-	events.sort()
-	inside = False
-	for pos, typ, record in events:
-		if typ == 'istart':
-			inside = True
-		elif typ == 'iend':
-			inside = False
-		elif not inside:
-			yield record
+#def subtract_intervals(records, intervals):
+#	"""
+#	Yield only those records that fall outside of the given intervals.
+#	"""
+#	events = [(r.start, 'rec', r) for r in records]
+#	events.extend((i[0], 'istart', None) for i in intervals)
+#	events.extend((i[1], 'iend', None) for i in intervals)
+#	events.sort()
+#	inside = False
+#	for pos, typ, record in events:
+#		if typ == 'istart':
+#			inside = True
+#		elif typ == 'iend':
+#			inside = False
+#		elif not inside:
+#			yield record
 
 
 def add_coverage_probes(probes, path, args, CONTIG_LENGTHS, N_INTERVALS, blacklist):
@@ -407,10 +458,13 @@ def add_coverage_probes(probes, path, args, CONTIG_LENGTHS, N_INTERVALS, blackli
 	logger.info('Reading %r ...', path)
 	if args.coverage:
 		coverages = [r for r in parse_coverages(path) if r.chrom in CONTIG_LENGTHS]
-	elif args.cn:
-		coverages = [r for r in parse_cn_coverages(args) if r.chrom in CONTIG_LENGTHS]
-	else:
-		coverages = [r for r in parse_snv_coverages(args) if r.chrom in CONTIG_LENGTHS]
+#	elif args.cn:
+#		coverages = [r for r in parse_cn_coverages(args) if r.chrom in CONTIG_LENGTHS]
+	
+	elif args.wisecondorx_cov:
+		coverages = [r for r in parse_wisecondorx_coverages(args) if r.chrom in CONTIG_LENGTHS]
+#	else:
+#		coverages = [r for r in parse_snv_coverages(args) if r.chrom in CONTIG_LENGTHS]
 
 	non_zero_len = len([r for r in coverages if r.coverage != 0])
 	mean_coverage = sum(r.coverage for r in coverages) / non_zero_len
@@ -423,55 +477,65 @@ def add_coverage_probes(probes, path, args, CONTIG_LENGTHS, N_INTERVALS, blackli
 			coverage_factor = 2
 
 		n_intervals = N_INTERVALS[chromosome]
-		for record in subtract_intervals(bin_coverages(records,args.bins), n_intervals):
+		if not args.wisecondorx_cov:
+			iterable_records = subtract_intervals(bin_coverages(records,args.bins), n_intervals)
+
+		else:
+			iterable_records = bin_coverages(records,args.bins)
+				
+		for record in iterable_records:	
+			#print("#"+record.chrom,record.start)
 			if contained_by_blacklist(record, blacklist):
 				continue
 
-			if not args.cn:
-				height = coverage_factor * record.coverage / mean_coverage
-			else:
-				height=record.coverage
+#			if not (args.cn or args.wisecondorx_cov):
+#				height = coverage_factor * record.coverage / mean_coverage
+#			else:
+			height=record.coverage
 
-			height = np.log2(height)
+#			if not args.wisecondorx_cov:
+#				height = np.log2(height)
+
 			height = min(MAX_HEIGHT, height)
 			height = max(MIN_HEIGHT, height)
 			if height == 0.0:
 				height = 0.01
+				
 			make_probe(probes, record.chrom, record.start, record.end, height, 'coverage')
 			n += 1
 	logger.info('Added %s coverage probes', n)
 
 #apply filtering
-def variant_filter(variants, min_size=5000,max_frequency=0.01, frequency_tag='FRQ'):
-
-	for variant in variants:
-
-		end = variant.INFO.get('END')
-		if end and not variant.INFO.get('SVTYPE') == 'TRA':
-
-			if abs( int(end) - variant.start) <= min_size:
-				# Too short
-				continue
-
-		elif variant.INFO.get('SVTYPE') == 'BND':
-			bnd_chrom, bnd_pos = variant.ALT[0][2:-1].split(':')
-
-			bnd_pos = int(variant.ALT[0].split(':')[1].split("]")[0].split("[")[0])
-			bnd_chrom= variant.ALT[0].split(':')[0].split("]")[-1].split("[")[-1]
-
-			if bnd_chrom == variant.CHROM and abs(bnd_pos - variant.start) < min_size:
-				continue
-
-		elif variant.INFO.get('SVTYPE') == 'TRA':
-
-			bnd_pos = variant.INFO.get('END')
-			bnd_chrom =variant.INFO.get('CHR2');
-
-		frequency = variant.INFO.get(frequency_tag)
-		if frequency is not None and frequency > max_frequency:
-			continue
-
-		yield variant
+#def variant_filter(variants, min_size=5000,max_frequency=0.01, frequency_tag='FRQ'):
+#
+#	for variant in variants:
+#
+#		end = variant.INFO.get('END')
+#		if end and not variant.INFO.get('SVTYPE') == 'TRA':
+#
+#			if abs( int(end) - variant.start) <= min_size:
+#				# Too short
+#				continue
+#
+#		elif variant.INFO.get('SVTYPE') == 'BND':
+#			bnd_chrom, bnd_pos = variant.ALT[0][2:-1].split(':')
+#
+#			bnd_pos = int(variant.ALT[0].split(':')[1].split("]")[0].split("[")[0])
+#			bnd_chrom= variant.ALT[0].split(':')[0].split("]")[-1].split("[")[-1]
+#
+#			if bnd_chrom == variant.CHROM and abs(bnd_pos - variant.start) < min_size:
+#				continue
+#
+#		elif variant.INFO.get('SVTYPE') == 'TRA':
+#
+#			bnd_pos = variant.INFO.get('END')
+#			bnd_chrom =variant.INFO.get('CHR2');
+#
+#		frequency = variant.INFO.get(frequency_tag)
+#		if frequency is not None and frequency > max_frequency:
+#			continue
+#
+#		yield variant
 
 class BlacklistRecord:
 	__slots__ = ('chrom', 'start', 'end')
@@ -504,37 +568,43 @@ def contained_by_blacklist(event, blacklist):
 	return False
 
 #retrieve the sample id, assuming single sample vcf
-def retrieve_sample_id(vcf, vcf_path):
-	samples = vcf.samples
-	if len(samples) == 1:
-		sample = samples[0]
-	else:
-		sample = vcf_path.split("/")[-1].split("_")[0].split(".")[0]
-	return(sample)
-
+def retrieve_sample_id(input, input_path):
+#	if input is None:
+	sample = os.path.basename(input_path).split(".")[0]
+#	else:
+#		samples = input.samples
+#		if len(samples) == 1:
+#			sample = samples[0]
+#		else:
+#			sample = input_path.split("/")[-1].split("_")[0].split(".")[0]
+    
+	return sample
 
 def main():
 	logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 	parser = argparse.ArgumentParser("VCF2cytosure - convert SV vcf files to cytosure")
 
-	group = parser.add_argument_group('Filtering')
-	group.add_argument('--size', default=1000, type=int,help='Minimum variant size. Default: %(default)s')
-	group.add_argument('--frequency', default=0.01, type=float,help='Maximum frequency. Default: %(default)s')
-	group.add_argument('--frequency_tag', default='FRQ', type=str,help='Frequency tag of the info field. Default: %(default)s')
-	group.add_argument('--no-filter', dest='do_filtering', action='store_false',default=True,help='Disable any filtering')
+#	group = parser.add_argument_group('Filtering')
+#	group.add_argument('--size', default=1000, type=int,help='Minimum variant size. Default: %(default)s')
+#	group.add_argument('--frequency', default=0.01, type=float,help='Maximum frequency. Default: %(default)s')
+#	group.add_argument('--frequency_tag', default='FRQ', type=str,help='Frequency tag of the info field. Default: %(default)s')
+#	group.add_argument('--no-filter', dest='do_filtering', action='store_false',default=True,help='Disable any filtering')
 
 	group = parser.add_argument_group('Input')
 	group.add_argument('--genome',required=False, default=37, help='Human genome version. Use 37 for GRCh37/hg19, 38 for GRCh38 template.')
 	group.add_argument('--sex',required=False, default='female', help='Sample sex male/female. Default: %(default)s')
-	group.add_argument('--vcf',required=True,help='VCF file')
+	group.add_argument('--vcf',required=False,help='VCF file')
+	group.add_argument('--wisecondorx_aberrations', type=str, required=False,help='path to aberrations.bed file from WisecondorX')
 	group.add_argument('--bins',type=int,default=20,help='the number of coverage bins per probes default=20')
 	group.add_argument('--coverage',help='Coverage file')
-	group.add_argument('--cn', type=str,
-					   help='add probes using cnvkit cn file(cannot be used together with --coverage)')
-	group.add_argument('--snv',type=str,help='snv vcf file, use coverage annotation to position the height of the probes(cannot be used together with --coverage)')
+#	group.add_argument('--cn', type=str,
+#					   help='add probes using cnvkit cn file(cannot be used together with --coverage)')
+	group.add_argument('--wisecondorx_cov', type=str, help='path to bins.bed file')
+#	group.add_argument('--snv',type=str,help='snv vcf file, use coverage annotation to position the height of the probes(cannot be used together with --coverage)')
 	group.add_argument('--dp',type=str,default="DP",help='read depth tag of snv vcf file. This option is only used if you use snv to set the heigth of the probes. The dp tag is a tag which is used to retrieve the depth of coverage across the snv (default=DP)')
 	group.add_argument('--maxbnd',type=int,default=10000,help='Maxixmum BND size, BND events exceeding this size are discarded')
 	group.add_argument('--out',help='output file (default = the prefix of the input vcf)')
+	group.add_argument('--wcx_size',type=int,help='Variants smaller than this size will be filtered out')
 
 	group.add_argument('--blacklist', help='Blacklist bed format file to exclude completely contained variants.')
 
@@ -545,9 +615,18 @@ def main():
 
 	logger.info('vcf2cytosure %s', __version__)
 
-	if (args.coverage and args.cn) or (args.coverage and args.snv) or (args.snv and args.cn):
-		print ("Choose one of --coverage, --snv and --cn. They cannot be combined.")
+	if not (args.vcf or args.wisecondorx_aberrations):
+		print("Provide variant file. --vcf or --wisecondorx_aberrations. See -help")
 		quit()
+
+#	if (args.vcf and args.wisecondorx_aberrations):
+#		print("Choose --vcf or --wisecondorx_aberrations. They cannot be combined")
+#		quit()
+#
+#	if (args.coverage and args.cn) or (args.coverage and args.snv) or (args.snv and args.cn) or (args.wisecondorx_cov and args.cn) or (args.wisecondorx_cov and args.snv) or (args.wisecondorx_cov and args.coverage):
+#		print ("Choose one of --coverage, --snv, --cn and --wisecondorx_cov. They cannot be combined.")
+#		quit()
+
 
 	if int(args.genome) == 38:
 		CGH_TEMPLATE = CGH_TEMPLATE_38
@@ -568,40 +647,50 @@ def main():
 		sex_male = 'true'
 		promega_sex = 'Male'
 
-	vcf = VCF(args.vcf)
+#	if args.wisecondorx_aberrations:
+	sample_id=retrieve_sample_id(None, args.wisecondorx_aberrations)
 
-	sample_id=retrieve_sample_id(vcf, args.vcf)
+#	else:
+#		vcf = VCF(args.vcf)
+#		sample_id=retrieve_sample_id(vcf, args.vcf)
+
 	tree = etree.parse(StringIO(CGH_TEMPLATE.format(sample_id,sample_id,sample_id,sample_id,sex_male,promega_sex,sex_male)), parser)
 
 	segmentation = tree.xpath('/data/cgh/segmentation')[0]
 	probes = tree.xpath('/data/cgh/probes')[0]
 	submission = tree.xpath('/data/cgh/submission')[0]
-
+		
 	blacklist = []
 	if args.blacklist:
 		blacklist = [r for r in read_blacklist(args.blacklist) if r.chrom in CONTIG_LENGTHS]
 
 	chr_intervals = defaultdict(list)
-	if args.do_filtering:
-		vcf = variant_filter(vcf,min_size=args.size,max_frequency=args.frequency,frequency_tag=args.frequency_tag)
+#	if args.do_filtering and not args.wisecondorx_aberrations:
+#		vcf = variant_filter(vcf,min_size=args.size,max_frequency=args.frequency,frequency_tag=args.frequency_tag)
 	n = 0
-	for event in events(vcf, CONTIG_LENGTHS):
+
+#	if not args.wisecondorx_aberrations:
+#	event_generator = events(vcf, CONTIG_LENGTHS)
+#	else:
+	event_generator = wisecondorx_events(args, CONTIG_LENGTHS)
+
+	for event in event_generator:
 		end = event.end
 		height = ABERRATION_HEIGHTS[event.type]
 		make_segment(segmentation, event.chrom, event.start, end, height)
 
 		comment = format_comment(event.info)
-		if "rankScore" in event.info:
-			rank_score = int(event.info['RankScore'].partition(':')[2])
-		else:
-			rank_score =0
-
-		#occ=0
-		#if args.frequency_tag in event.info:
-		#	occ=event.info[args.frequency_tag]
-		occ=0
-		if "OCC" in event.info:
-			occ=event.info["OCC"]
+#		if "rankScore" in event.info:
+#			rank_score = int(event.info['RankScore'].partition(':')[2])
+#		else:
+#			rank_score =0
+#
+#		#occ=0
+#		#if args.frequency_tag in event.info:
+#		#	occ=event.info[args.frequency_tag]
+#		occ=0
+#		if "OCC" in event.info:
+#			occ=event.info["OCC"]
 
 		if event.type in ("INV",'INS', 'BND',"TRA") and not event.end:
 			continue
@@ -614,14 +703,18 @@ def main():
 				continue
 
 		make_aberration(submission, event.chrom, event.start, end, confirmation=event.type,
-			comment=comment, n_probes=occ, copy_number=rank_score)
+			comment=comment)		
+
+#		make_aberration(submission, event.chrom, event.start, end, confirmation=event.type,
+#			comment=comment, n_probes=occ, copy_number=rank_score)
 
 		chr_intervals[event.chrom].append((event.start, event.end))
 		# show probes at slightly different height than segments
 		for pos in spaced_probes(event.start, event.end - 1):
 			make_probe(probes, event.chrom, pos, pos + 60, height, event.type)
 		n += 1
-	if args.coverage or args.snv or args.cn:
+	if args.wisecondorx_cov:
+#	if args.coverage or args.snv or args.cn or args.wisecondorx_cov:
 		add_coverage_probes(probes, args.coverage, args, CONTIG_LENGTHS, N_INTERVALS, blacklist)
 
 	else:
