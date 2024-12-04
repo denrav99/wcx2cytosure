@@ -407,18 +407,10 @@ def main():
 	probes = tree.xpath('/data/cgh/probes')[0]
 	submission = tree.xpath('/data/cgh/submission')[0]
 		
-#	blacklist = []
-#	if args.blacklist:
-#		blacklist = [r for r in read_blacklist(args.blacklist) if r.chrom in CONTIG_LENGTHS]
 
 	chr_intervals = defaultdict(list)
-#	if args.do_filtering and not args.wisecondorx_aberrations:
-#		vcf = variant_filter(vcf,min_size=args.size,max_frequency=args.frequency,frequency_tag=args.frequency_tag)
 	n = 0
 
-#	if not args.wisecondorx_aberrations:
-#	event_generator = events(vcf, CONTIG_LENGTHS)
-#	else:
 	event_generator = wisecondorx_events(args, CONTIG_LENGTHS)
 
 	for event in event_generator:
@@ -427,33 +419,9 @@ def main():
 		make_segment(segmentation, event.chrom, event.start, end, height)
 
 		comment = format_comment(event.info)
-#		if "rankScore" in event.info:
-#			rank_score = int(event.info['RankScore'].partition(':')[2])
-#		else:
-#			rank_score =0
-#
-#		#occ=0
-#		#if args.frequency_tag in event.info:
-#		#	occ=event.info[args.frequency_tag]
-#		occ=0
-#		if "OCC" in event.info:
-#			occ=event.info["OCC"]
-#
-#		if event.type in ("INV",'INS', 'BND',"TRA") and not event.end:
-#			continue
-#			#pass
-#		elif event.type in ("INV",'INS', 'BND',"TRA") and (abs(event.start-event.end) > args.maxbnd ):
-#			#pass
-#			continue
-#		elif args.blacklist:
-#			if contained_by_blacklist(event, blacklist):
-#				continue
 
 		make_aberration(submission, event.chrom, event.start, end, confirmation=event.type,
 			comment=comment)		
-
-#		make_aberration(submission, event.chrom, event.start, end, confirmation=event.type,
-#			comment=comment, n_probes=occ, copy_number=rank_score)
 
 		chr_intervals[event.chrom].append((event.start, event.end))
 		# show probes at slightly different height than segments
@@ -461,15 +429,11 @@ def main():
 			make_probe(probes, event.chrom, pos, pos + 60, height, event.type)
 		n += 1
 	if args.wisecondorx_cov:
-#	if args.coverage or args.snv or args.cn or args.wisecondorx_cov:
-#		add_coverage_probes(probes, args.coverage, args, CONTIG_LENGTHS, N_INTERVALS, blacklist)
-#		add_coverage_probes(probes, args, CONTIG_LENGTHS, factor)
 		add_coverage_probes(probes, args, CONTIG_LENGTHS)
 	else:
 		add_probes_between_events(probes, chr_intervals, CONTIG_LENGTHS)
 
 	tree.write(args.out, pretty_print=True)
-#	tree.write(output_filename, pretty_print=True)
 	logger.info('Wrote %d variants to CGH', n)
 
 
