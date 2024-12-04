@@ -326,13 +326,13 @@ class CoverageRecord:
 #			coverage = float(coverage)
 #			yield CoverageRecord(chrom, start, end, coverage)
 
-def retrieve_snp(content,args):
-	snp_data=[]
-	snp_data.append(content[0])
-	snp_data.append(int(content[1]))
-	snp_data.append(float( content[7].split(";{}=".format(args.dp))[-1].split(";")[0] ))
+#def retrieve_snp(content,args):
+#	snp_data=[]
+#	snp_data.append(content[0])
+#	snp_data.append(int(content[1]))
+#	snp_data.append(float( content[7].split(";{}=".format(args.dp))[-1].split(";")[0] ))
 
-	return (snp_data)
+#	return (snp_data)
 
 def parse_wisecondorx_coverages(args):
 	probe_data=[]
@@ -449,20 +449,20 @@ def bin_coverages(coverages, n):
 #		elif not inside:
 #			yield record
 
-
-def add_coverage_probes(probes, path, args, CONTIG_LENGTHS, N_INTERVALS, blacklist):
+def add_coverage_probes(probes, args, CONTIG_LENGTHS):
+#def add_coverage_probes(probes, path, args, CONTIG_LENGTHS, N_INTERVALS, blacklist):
 	"""
 	probes -- <probes> element
 	path -- path to tab-separated file with coverages
 	"""
-	logger.info('Reading %r ...', path)
-	if args.coverage:
-		coverages = [r for r in parse_coverages(path) if r.chrom in CONTIG_LENGTHS]
+#	logger.info('Reading %r ...', path)
+#	if args.coverage:
+#		coverages = [r for r in parse_coverages(path) if r.chrom in CONTIG_LENGTHS]
 #	elif args.cn:
 #		coverages = [r for r in parse_cn_coverages(args) if r.chrom in CONTIG_LENGTHS]
 	
-	elif args.wisecondorx_cov:
-		coverages = [r for r in parse_wisecondorx_coverages(args) if r.chrom in CONTIG_LENGTHS]
+#	elif args.wisecondorx_cov:
+	coverages = [r for r in parse_wisecondorx_coverages(args) if r.chrom in CONTIG_LENGTHS]
 #	else:
 #		coverages = [r for r in parse_snv_coverages(args) if r.chrom in CONTIG_LENGTHS]
 
@@ -476,17 +476,17 @@ def add_coverage_probes(probes, path, args, CONTIG_LENGTHS, N_INTERVALS, blackli
 		if args.sex == 'male' and (chromosome in ['Y','X']):
 			coverage_factor = 2
 
-		n_intervals = N_INTERVALS[chromosome]
-		if not args.wisecondorx_cov:
-			iterable_records = subtract_intervals(bin_coverages(records,args.bins), n_intervals)
+#		n_intervals = N_INTERVALS[chromosome]
+#		if not args.wisecondorx_cov:
+#			iterable_records = subtract_intervals(bin_coverages(records,args.bins), n_intervals)
 
-		else:
-			iterable_records = bin_coverages(records,args.bins)
+#		else:
+		iterable_records = bin_coverages(records,args.bins)
 				
 		for record in iterable_records:	
 			#print("#"+record.chrom,record.start)
-			if contained_by_blacklist(record, blacklist):
-				continue
+#			if contained_by_blacklist(record, blacklist):
+#				continue
 
 #			if not (args.cn or args.wisecondorx_cov):
 #				height = coverage_factor * record.coverage / mean_coverage
@@ -537,35 +537,35 @@ def add_coverage_probes(probes, path, args, CONTIG_LENGTHS, N_INTERVALS, blackli
 #
 #		yield variant
 
-class BlacklistRecord:
-	__slots__ = ('chrom', 'start', 'end')
-
-	def __init__(self, chrom, start, end):
-		self.chrom = chrom
-		self.start = start
-		self.end = end
+#class BlacklistRecord:
+#	__slots__ = ('chrom', 'start', 'end')
+#
+#	def __init__(self, chrom, start, end):
+#		self.chrom = chrom
+#		self.start = start
+#		self.end = end
 
 # read Blacklist
-def read_blacklist(path):
-	with open(path) as f:
-		for line in f:
-			if line.startswith('#'):
-				continue
-			content=line.split('\t')
-			chrom=content[0]
-			start=content[1]
-			end=content[2]
-			start = int(start)
-			end = int(end)
-			yield BlacklistRecord(chrom, start, end)
+#def read_blacklist(path):
+#	with open(path) as f:
+#		for line in f:
+#			if line.startswith('#'):
+#				continue
+#			content=line.split('\t')
+#			chrom=content[0]
+#			start=content[1]
+#			end=content[2]
+#			start = int(start)
+#			end = int(end)
+#			yield BlacklistRecord(chrom, start, end)
 
-def contained_by_blacklist(event, blacklist):
-	for br in blacklist:
-		if event.chrom == br.chrom:
-			if event.start >= br.start and event.end <= br.end:
-				return True
-
-	return False
+#def contained_by_blacklist(event, blacklist):
+#	for br in blacklist:
+#		if event.chrom == br.chrom:
+#			if event.start >= br.start and event.end <= br.end:
+#				return True
+#
+#	return False
 
 #retrieve the sample id, assuming single sample vcf
 def retrieve_sample_id(input, input_path):
@@ -593,20 +593,20 @@ def main():
 	group = parser.add_argument_group('Input')
 	group.add_argument('--genome',required=False, default=37, help='Human genome version. Use 37 for GRCh37/hg19, 38 for GRCh38 template.')
 	group.add_argument('--sex',required=False, default='female', help='Sample sex male/female. Default: %(default)s')
-	group.add_argument('--vcf',required=False,help='VCF file')
+#	group.add_argument('--vcf',required=False,help='VCF file')
 	group.add_argument('--wisecondorx_aberrations', type=str, required=False,help='path to aberrations.bed file from WisecondorX')
 	group.add_argument('--bins',type=int,default=20,help='the number of coverage bins per probes default=20')
-	group.add_argument('--coverage',help='Coverage file')
+#	group.add_argument('--coverage',help='Coverage file')
 #	group.add_argument('--cn', type=str,
 #					   help='add probes using cnvkit cn file(cannot be used together with --coverage)')
 	group.add_argument('--wisecondorx_cov', type=str, help='path to bins.bed file')
 #	group.add_argument('--snv',type=str,help='snv vcf file, use coverage annotation to position the height of the probes(cannot be used together with --coverage)')
-	group.add_argument('--dp',type=str,default="DP",help='read depth tag of snv vcf file. This option is only used if you use snv to set the heigth of the probes. The dp tag is a tag which is used to retrieve the depth of coverage across the snv (default=DP)')
-	group.add_argument('--maxbnd',type=int,default=10000,help='Maxixmum BND size, BND events exceeding this size are discarded')
+#	group.add_argument('--dp',type=str,default="DP",help='read depth tag of snv vcf file. This option is only used if you use snv to set the heigth of the probes. The dp tag is a tag which is used to retrieve the depth of coverage across the snv (default=DP)')
+#	group.add_argument('--maxbnd',type=int,default=10000,help='Maxixmum BND size, BND events exceeding this size are discarded')
 	group.add_argument('--out',help='output file (default = the prefix of the input vcf)')
 	group.add_argument('--wcx_size',type=int,help='Variants smaller than this size will be filtered out')
 
-	group.add_argument('--blacklist', help='Blacklist bed format file to exclude completely contained variants.')
+#	group.add_argument('--blacklist', help='Blacklist bed format file to exclude completely contained variants.')
 
 	group.add_argument('-V','--version',action='version',version="%(prog)s "+__version__ ,
 			   help='Print program version and exit.')
@@ -615,9 +615,12 @@ def main():
 
 	logger.info('vcf2cytosure %s', __version__)
 
-	if not (args.vcf or args.wisecondorx_aberrations):
-		print("Provide variant file. --vcf or --wisecondorx_aberrations. See -help")
-		quit()
+	if not args.wisecondorx_aberrations:
+		print("Provide variant file. --wisecondorx_aberrations. See -help")
+		quit()	
+#	if not (args.vcf or args.wisecondorx_aberrations):
+#		print("Provide variant file. --vcf or --wisecondorx_aberrations. See -help")
+#		quit()
 
 #	if (args.vcf and args.wisecondorx_aberrations):
 #		print("Choose --vcf or --wisecondorx_aberrations. They cannot be combined")
@@ -631,11 +634,11 @@ def main():
 	if int(args.genome) == 38:
 		CGH_TEMPLATE = CGH_TEMPLATE_38
 		CONTIG_LENGTHS = CONTIG_LENGTHS_38
-		N_INTERVALS = N_INTERVALS_38
+#		N_INTERVALS = N_INTERVALS_38
 	else:
 		CGH_TEMPLATE = CGH_TEMPLATE_37
 		CONTIG_LENGTHS = CONTIG_LENGTHS_37
-		N_INTERVALS = N_INTERVALS_37
+#		N_INTERVALS = N_INTERVALS_37
 
 	if not args.out:
 		args.out=".".join(args.vcf.split(".")[0:len(args.vcf.split("."))-1])+".cgh"
@@ -660,9 +663,9 @@ def main():
 	probes = tree.xpath('/data/cgh/probes')[0]
 	submission = tree.xpath('/data/cgh/submission')[0]
 		
-	blacklist = []
-	if args.blacklist:
-		blacklist = [r for r in read_blacklist(args.blacklist) if r.chrom in CONTIG_LENGTHS]
+#	blacklist = []
+#	if args.blacklist:
+#		blacklist = [r for r in read_blacklist(args.blacklist) if r.chrom in CONTIG_LENGTHS]
 
 	chr_intervals = defaultdict(list)
 #	if args.do_filtering and not args.wisecondorx_aberrations:
@@ -691,16 +694,16 @@ def main():
 #		occ=0
 #		if "OCC" in event.info:
 #			occ=event.info["OCC"]
-
-		if event.type in ("INV",'INS', 'BND',"TRA") and not event.end:
-			continue
-			#pass
-		elif event.type in ("INV",'INS', 'BND',"TRA") and (abs(event.start-event.end) > args.maxbnd ):
-			#pass
-			continue
-		elif args.blacklist:
-			if contained_by_blacklist(event, blacklist):
-				continue
+#
+#		if event.type in ("INV",'INS', 'BND',"TRA") and not event.end:
+#			continue
+#			#pass
+#		elif event.type in ("INV",'INS', 'BND',"TRA") and (abs(event.start-event.end) > args.maxbnd ):
+#			#pass
+#			continue
+#		elif args.blacklist:
+#			if contained_by_blacklist(event, blacklist):
+#				continue
 
 		make_aberration(submission, event.chrom, event.start, end, confirmation=event.type,
 			comment=comment)		
@@ -715,8 +718,8 @@ def main():
 		n += 1
 	if args.wisecondorx_cov:
 #	if args.coverage or args.snv or args.cn or args.wisecondorx_cov:
-		add_coverage_probes(probes, args.coverage, args, CONTIG_LENGTHS, N_INTERVALS, blacklist)
-
+#		add_coverage_probes(probes, args.coverage, args, CONTIG_LENGTHS, N_INTERVALS, blacklist)
+		add_coverage_probes(probes, args, CONTIG_LENGTHS)
 	else:
 		add_probes_between_events(probes, chr_intervals, CONTIG_LENGTHS)
 
