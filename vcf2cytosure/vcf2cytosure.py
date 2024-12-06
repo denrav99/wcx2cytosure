@@ -87,7 +87,7 @@ def strip_template(path):
 	return tree
 
 
-def make_probe(parent, chromosome, start, end, height, text):
+def make_probe(parent, chromosome, start, end, height, text, original_coverage=None):
 	probe = etree.SubElement(parent, 'probe')
 	probe.attrib.update({
 		'name': text,
@@ -99,6 +99,9 @@ def make_probe(parent, chromosome, start, end, height, text):
 		'smoothed_normalized': '0.0',
 		'sequence': 'AACCGGTT',
 	})
+
+	if original_coverage is not None:
+		probe.attrib['original_coverage'] = '{:.3f}'.format(original_coverage)
 
 	red = 1000
 	green = red * 2**height
@@ -232,18 +235,18 @@ def merge_intervals(intervals):
 				yield (start, pos)
 
 
-def complement_intervals(intervals, chromosome_length):
-	"""
-	>>> list(complement_intervals([(0, 1), (3, 4), (18, 20)], 20))
-	[(1, 3), (4, 18)]
-	"""
-	prev_end = 0
-	for start, end in intervals:
-		if prev_end != start:
-			yield prev_end, start
-		prev_end = end
-	if prev_end != chromosome_length:
-		yield prev_end, chromosome_length
+#def complement_intervals(intervals, chromosome_length):
+#	"""
+#	>>> list(complement_intervals([(0, 1), (3, 4), (18, 20)], 20))
+#	[(1, 3), (4, 18)]
+#	"""
+#	prev_end = 0
+#	for start, end in intervals:
+#		if prev_end != start:
+#			yield prev_end, start
+#		prev_end = end
+#	if prev_end != chromosome_length:
+#		yield prev_end, chromosome_length
 
 
 def add_probes_between_events(probes, chr_intervals, CONTIG_LENGTHS):
@@ -339,16 +342,24 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 		for record in iterable_records:	
 			#print("#"+record.chrom,record.start)
 
-			height=record.coverage
-#			adjusted_height=(((2**height)-1)* 100) / 10
+			mean_diff = abs(record.coverage - mean_coverage)
+
+			if mean_diff >= 0.015:
+				if record.coverage > mean_coverage:
+					height=1.0
+				else:
+					height=-1.0
+			else:
+				height=record.coverage
 
 			height = min(MAX_HEIGHT, height)
 			height = max(MIN_HEIGHT, height)
 			if height == 0.0:
 				height = 0.01
 				
-			make_probe(probes, record.chrom, record.start, record.end, height, 'coverage')
-#			make_probe(probes, record.chrom, record.start, record.end, adjusted_height, 'coverage')
+#			make_probe(probes, record.chrom, record.start, record.end, height, 'coverage')
+			make_probe(probes, record.chrom, record.start, record.end, height, 'coverage', record.coverage)
+
 			n += 1
 	logger.info('Added %s coverage probes', n)
 
