@@ -337,18 +337,24 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 		if args.sex == 'male' and (chromosome in ['Y','X']):
 			coverage_factor = 2
 
+		chrom_coverages = [r.coverage for r in records if r.coverage != 0]
+		chrom_mean_coverage = sum(chrom_coverages) / len(chrom_coverages)
+
+		logger.info(f"Chromosome {chromosome} mean coverage: {chrom_mean_coverage:.2f}")
+	
 		iterable_records = bin_coverages(records,args.bins)
 				
 		for record in iterable_records:	
 			#print("#"+record.chrom,record.start)
 
-			mean_diff = abs(record.coverage - mean_coverage)
-
+			mean_diff = abs(chrom_mean_coverage - mean_coverage)
+			
 			if mean_diff >= 0.015:
 				if record.coverage > mean_coverage:
-					height=1.0
+					height=record.coverage+1.01
 				else:
-					height=-1.0
+					height=record.coverage-1.01
+			 
 			else:
 				height=record.coverage
 
