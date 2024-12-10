@@ -269,6 +269,71 @@ def parse_wisecondorx_coverages(path):
 
 	return probe_data
 
+def set_heights(i, chrom, iterable_records, mean_coverage):
+	coverage = iterable_records[chrom]['coverage'][i]
+	diff = abs(coverage - mean_coverage)
+
+	if diff >= 0.015:
+
+		if i == 0:
+			one_record_forward = iterable_records[chrom]['coverage'][i + 1]
+			two_records_forward = iterable_records[chrom]['coverage'][i + 2]
+
+			one_record_diff = abs(one_record_forward - mean_coverage)
+			two_record_diff = abs(two_records_forward - mean_coverage)
+
+			if one_record_diff >= 0.015 and one_record_forward > 0 and two_record_diff > 0.015 and two_records_forward > 0 and coverage > 0:
+				height=coverage+1
+
+			elif one_record_diff >= 0.015 and one_record_forward < 0 and two_record_diff > 0.015 and two_records_forward < 0 and coverage < 0:
+				height=coverage-1
+			else:
+				height=coverage
+
+		elif i == len(iterable_records[chrom]['coverage']) - 1:
+
+			one_record_back = iterable_records[chrom]['coverage'][i - 1]
+			two_records_back = iterable_records[chrom]['coverage'][i - 2]
+
+			one_record_diff = abs(one_record_back - mean_coverage)
+			two_record_diff = abs(two_records_back - mean_coverage)
+
+			if one_record_diff >= 0.015 and one_record_back > 0 and two_record_diff > 0.015 and two_records_back > 0 and coverage > 0:
+				height=coverage+1
+
+			elif one_record_diff >= 0.015 and one_record_back < 0 and two_record_diff > 0.015 and two_records_back < 0 and coverage < 0:
+				height=coverage-1
+
+			else:
+				height=coverage
+
+		else:
+			next_record = iterable_records[chrom]['coverage'][i + 1]
+			prev_record = iterable_records[chrom]['coverage'][i - 1]
+
+			next_diff = abs(next_record - mean_coverage)
+			prev_diff = abs(prev_record - mean_coverage)
+
+			if next_diff >= 0.015 and next_record > 0 and prev_diff > 0.015 and prev_record > 0 and coverage > 0:
+				height=coverage+1
+
+			elif next_diff >= 0.015 and next_record < 0 and prev_diff > 0.015 and prev_record < 0 and coverage < 0:
+				height=coverage-1
+			else:
+				height=coverage
+
+	else:
+		height=coverage
+
+	height = min(MAX_HEIGHT, height)
+	height = max(MIN_HEIGHT, height)
+
+	if height == 0.0:
+		height = 0.01
+
+
+	return height
+
 def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 	"""
 	probes -- <probes> element
@@ -288,7 +353,8 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 	mean_coverage = sum(r) / len(r)
 	logger.info('Mean coverage excluding is %.2f', mean_coverage)
 
-	n = 0
+	n_probes = 0
+	n_heights = 0
 	coverage_factor = 1
 
 	for chrom in iterable_records:
@@ -297,75 +363,18 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 			continue		
 	
 		for i in range(len(iterable_records[chrom]['coverage'])):
-			
+		
 			start = iterable_records[chrom]['start'][i]
 			end = iterable_records[chrom]['end'][i]
 			coverage = iterable_records[chrom]['coverage'][i]
 
-			diff = abs(coverage - mean_coverage)
-			
-			if diff >= 0.015:
+			height = set_heights(i, chrom, iterable_records, mean_coverage)
+			n_heights += 1			
 
-				if i == 0:
-					one_record_forward = iterable_records[chrom]['coverage'][i + 1]
-					two_records_forward = iterable_records[chrom]['coverage'][i + 2]
-	
-					one_record_diff = abs(one_record_forward - mean_coverage)
-					two_record_diff = abs(two_records_forward - mean_coverage)
-
-					if one_record_diff >= 0.015 and one_record_forward > 0 and two_record_diff > 0.015 and two_records_forward > 0 and coverage > 0:
-						height=coverage+1
-
-					elif one_record_diff >= 0.015 and one_record_forward < 0 and two_record_diff > 0.015 and two_records_forward < 0 and coverage < 0:
-						height=coverage-1
-					else:
-						height=coverage 			
-
-				elif i == len(iterable_records[chrom]['coverage']) - 1:
-
-					one_record_back = iterable_records[chrom]['coverage'][i - 1]
-					two_records_back = iterable_records[chrom]['coverage'][i - 2]
-
-					one_record_diff	= abs(one_record_back - mean_coverage)
-					two_record_diff	= abs(two_records_back - mean_coverage)
-
-					if one_record_diff >= 0.015 and one_record_back > 0 and two_record_diff > 0.015 and two_records_back > 0 and coverage > 0:
-						height=coverage+1
-
-					elif one_record_diff >= 0.015 and one_record_back < 0 and two_record_diff > 0.015 and two_records_back < 0 and coverage < 0:
-						height=coverage-1
-                                
-					else:
-						height=coverage
-
-				else:
-					next_record = iterable_records[chrom]['coverage'][i + 1] 
-					prev_record = iterable_records[chrom]['coverage'][i - 1]
-				
-					next_diff = abs(next_record - mean_coverage)
-					prev_diff = abs(prev_record - mean_coverage)
-	
-					if next_diff >= 0.015 and next_record > 0 and prev_diff > 0.015 and prev_record > 0 and coverage > 0:
-						height=coverage+1
-
-					elif next_diff >= 0.015 and next_record < 0 and prev_diff > 0.015 and prev_record < 0 and coverage < 0:
-						height=coverage-1
-					else:
-						height=coverage
-			 
-			else:
-				height=coverage
-
-			height = min(MAX_HEIGHT, height)
-			height = max(MIN_HEIGHT, height)					
-
-			if height == 0.0:
-				height = 0.01
-				
 			make_probe(probes, chrom, start, end, height,'coverage', coverage)
 
-			n += 1
-	logger.info('Added %s coverage probes', n)
+			n_probes += 1
+	logger.info('Added %s coverage probes and %s heights', n_probes, n_heights)
 
 #retrieve the sample id, assuming single sample vcf
 def retrieve_sample_id(input, input_path):
