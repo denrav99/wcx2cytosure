@@ -235,20 +235,6 @@ def merge_intervals(intervals):
 				yield (start, pos)
 
 
-#def complement_intervals(intervals, chromosome_length):
-#	"""
-#	>>> list(complement_intervals([(0, 1), (3, 4), (18, 20)], 20))
-#	[(1, 3), (4, 18)]
-#	"""
-#	prev_end = 0
-#	for start, end in intervals:
-#		if prev_end != start:
-#			yield prev_end, start
-#		prev_end = end
-#	if prev_end != chromosome_length:
-#		yield prev_end, chromosome_length
-
-
 def add_probes_between_events(probes, chr_intervals, CONTIG_LENGTHS):
 	for chrom, intervals in chr_intervals.items():
 		if chrom not in CONTIG_LENGTHS:
@@ -259,21 +245,9 @@ def add_probes_between_events(probes, chr_intervals, CONTIG_LENGTHS):
 				# CytoSure does not display probes at height=0.0
 				make_probe(probes, chrom, pos, pos + 60, 0.01, 'between events')
 
-
-class CoverageRecord:
-	__slots__ = ('chrom', 'start', 'end', 'coverage')
-
-	def __init__(self, chrom, start, end, coverage):
-		self.chrom = chrom
-		self.start = start
-		self.end = end
-		self.coverage = coverage
-
-def parse_wisecondorx_coverages(args):
-	probe_data=[]
-	opener=open
-	first=True
-	df = pd.read_csv(args.wisecondorx_cov, sep="\t", header=0)
+def parse_wisecondorx_coverages(path):
+	probe_data={}
+	df = pd.read_csv(path, sep="\t", header=0)
 	
 	for _, row in df.iterrows():
 
@@ -285,86 +259,110 @@ def parse_wisecondorx_coverages(args):
 		if pd.isna(coverage):
 			continue	
 
-		yield CoverageRecord(chrom, start, end, coverage)
-
-def group_by_chromosome(records):
-	"""
-	Group records by their .chrom attribute.
-
-	Yield pairs (chromosome, list_of_records) where list_of_records
-	are the consecutive records sharing the same chromosome.
-	"""
-	prev_chrom = None
-	chromosome_records = []
-	for record in records:
-		if record.chrom != prev_chrom:
-			if chromosome_records:
-				yield prev_chrom, chromosome_records
-				chromosome_records = []
-		chromosome_records.append(record)
-		prev_chrom = record.chrom
-	if chromosome_records:
-		yield prev_chrom, chromosome_records
+		if chrom not in probe_data:
+            		probe_data[chrom] = {'start': [], 'end': [], 'coverage': []}
+		
+		probe_data[chrom]['start'].append(start)
+		probe_data[chrom]['end'].append(end)
+		probe_data[chrom]['coverage'].append(coverage)
 
 
-def bin_coverages(coverages, n):
-	"""
-	Reduce the number of coverage records by re-binning
-	each *n* coverage values into a new single bin.
-
-	The coverages are assumed to be from a single chromosome.
-	"""
-	chrom = coverages[0].chrom
-	for i in range(0, len(coverages), n):
-		records = coverages[i:i+n]
-		cov = sum(r.coverage for r in records) / len(records)
-		yield CoverageRecord(chrom,	records[0].start, records[-1].end, cov)
+	return probe_data
 
 def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 	"""
 	probes -- <probes> element
 	path -- path to tab-separated file with coverages
 	"""
-	coverages = [r for r in parse_wisecondorx_coverages(args) if r.chrom in CONTIG_LENGTHS]
+	iterable_records = parse_wisecondorx_coverages(args.wisecondorx_cov)	
+	#print(iterable_records)
+	r=[]
+	for chrom in iterable_records:
+		if chrom not in CONTIG_LENGTHS:
+			continue
 
-	non_zero_len = len([r for r in coverages if r.coverage != 0])
-	mean_coverage = sum(r.coverage for r in coverages) / non_zero_len
-	logger.info('Mean coverage excluding 0 values is %.2f', mean_coverage)
+		for coverage in iterable_records[chrom]['coverage']:
+			if coverage:
+				r.append(coverage)
+	
+	mean_coverage = sum(r) / len(r)
+	logger.info('Mean coverage excluding is %.2f', mean_coverage)
 
 	n = 0
-	for chromosome, records in group_by_chromosome(coverages):
-		coverage_factor = 1
-		if args.sex == 'male' and (chromosome in ['Y','X']):
-			coverage_factor = 2
+	coverage_factor = 1
 
-		chrom_coverages = [r.coverage for r in records if r.coverage != 0]
-		chrom_mean_coverage = sum(chrom_coverages) / len(chrom_coverages)
-
-		logger.info(f"Chromosome {chromosome} mean coverage: {chrom_mean_coverage:.2f}")
+	for chrom in iterable_records:
+		
+		if chrom not in CONTIG_LENGTHS:
+			continue		
 	
-		iterable_records = bin_coverages(records,args.bins)
-				
-		for record in iterable_records:	
-			#print("#"+record.chrom,record.start)
-
-			mean_diff = abs(chrom_mean_coverage - mean_coverage)
+		for i in range(len(iterable_records[chrom]['coverage'])):
 			
-			if mean_diff >= 0.015:
-				if record.coverage > mean_coverage:
-					height=record.coverage+1.01
+			start = iterable_records[chrom]['start'][i]
+			end = iterable_records[chrom]['end'][i]
+			coverage = iterable_records[chrom]['coverage'][i]
+
+			diff = abs(coverage - mean_coverage)
+			
+			if diff >= 0.015:
+
+				if i == 0:
+					one_record_forward = iterable_records[chrom]['coverage'][i + 1]
+					two_records_forward = iterable_records[chrom]['coverage'][i + 2]
+	
+					one_record_diff = abs(one_record_forward - mean_coverage)
+					two_record_diff = abs(two_records_forward - mean_coverage)
+
+					if one_record_diff >= 0.015 and one_record_forward > 0 and two_record_diff > 0.015 and two_records_forward > 0 and coverage > 0:
+						height=coverage+1
+
+					elif one_record_diff >= 0.015 and one_record_forward < 0 and two_record_diff > 0.015 and two_records_forward < 0 and coverage < 0:
+						height=coverage-1
+					else:
+						height=coverage 			
+
+				elif i == len(iterable_records[chrom]['coverage']) - 1:
+
+					one_record_back = iterable_records[chrom]['coverage'][i - 1]
+					two_records_back = iterable_records[chrom]['coverage'][i - 2]
+
+					one_record_diff	= abs(one_record_back - mean_coverage)
+					two_record_diff	= abs(two_records_back - mean_coverage)
+
+					if one_record_diff >= 0.015 and one_record_back > 0 and two_record_diff > 0.015 and two_records_back > 0 and coverage > 0:
+						height=coverage+1
+
+					elif one_record_diff >= 0.015 and one_record_back < 0 and two_record_diff > 0.015 and two_records_back < 0 and coverage < 0:
+						height=coverage-1
+                                
+					else:
+						height=coverage
+
 				else:
-					height=record.coverage-1.01
+					next_record = iterable_records[chrom]['coverage'][i + 1] 
+					prev_record = iterable_records[chrom]['coverage'][i - 1]
+				
+					next_diff = abs(next_record - mean_coverage)
+					prev_diff = abs(prev_record - mean_coverage)
+	
+					if next_diff >= 0.015 and next_record > 0 and prev_diff > 0.015 and prev_record > 0 and coverage > 0:
+						height=coverage+1
+
+					elif next_diff >= 0.015 and next_record < 0 and prev_diff > 0.015 and prev_record < 0 and coverage < 0:
+						height=coverage-1
+					else:
+						height=coverage
 			 
 			else:
-				height=record.coverage
+				height=coverage
 
 			height = min(MAX_HEIGHT, height)
-			height = max(MIN_HEIGHT, height)
+			height = max(MIN_HEIGHT, height)					
+
 			if height == 0.0:
 				height = 0.01
 				
-#			make_probe(probes, record.chrom, record.start, record.end, height, 'coverage')
-			make_probe(probes, record.chrom, record.start, record.end, height, 'coverage', record.coverage)
+			make_probe(probes, chrom, start, end, height,'coverage', coverage)
 
 			n += 1
 	logger.info('Added %s coverage probes', n)
