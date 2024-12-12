@@ -6,13 +6,10 @@ Convert structural variants in a VCF to CGH (CytoSure) format
 import argparse
 import pandas as pd
 import logging
-import gzip
-import numpy as np
 import os
 from collections import namedtuple, defaultdict
 from io import StringIO
 from lxml import etree
-from cyvcf2 import VCF
 
 from .constants import *
 
@@ -162,7 +159,6 @@ def make_aberration(parent, chromosome, start, end, comment=None, method='conver
 		maxStopProbe='',
 		gain=is_gain,
 		method=method,
-		# TODO fill in the following values with something sensible
 		automationLevel='1.0',
 		baseline='0.0',
 		mosaicism='0.0',
@@ -195,16 +191,6 @@ def spaced_probes(start, end, probe_spacing=PROBE_SPACING):
 		yield pos
 		i += 1
 		pos = start + int(i * spacing)
-
-
-def probe_point(center, height=2.5, width=5001, steps=15):
-	"""
-	Yield (pos, height) pairs that "draw" a triangular shape (pointing upwards)
-	"""
-	pos_step = (width - 1) // (steps - 1)
-	height_step = height / ((steps - 1) // 2)
-	for i in range(-(steps // 2), steps // 2 + 1):
-		yield center + i * pos_step, height - height_step * abs(i) + 0.1
 
 
 def format_comment(info):
@@ -294,21 +280,6 @@ def group_by_chromosome(records):
 		yield prev_chrom, chromosome_records
 
 
-def bin_coverages(coverages, n):
-	"""
-	Reduce the number of coverage records by re-binning
-	each *n* coverage values into a new single bin.
-
-	The coverages are assumed to be from a single chromosome.
-	"""
-	chrom = coverages[0].chrom
-	for i in range(0, len(coverages), n):
-		records = coverages[i:i+n]
-		cov = sum(r.coverage for r in records) / len(records)
-		yield CoverageRecord(chrom, records[0].start, records[-1].end, cov)
-
-
-
 def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 	"""
 	probes -- <probes> element
@@ -323,14 +294,13 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 	n = 0
 	for chromosome, records in group_by_chromosome(coverages):
 		coverage_factor = 1
-
-		iterable_records = bin_coverages(records,args.bins)
 				
-		for record in iterable_records:	
+		for record in records:	
 			#print("#"+record.chrom,record.start)
 
 			height = record.coverage
-			adjusted_height=(((2**height)-1)* 100) / 10
+			adjusted_height = (record.coverage*10)
+#			adjusted_height=(((2**height)-1)* 100) / 10
 
 			adjusted_height = min(MAX_HEIGHT, adjusted_height)
 			adjusted_height = max(MIN_HEIGHT, adjusted_height)
@@ -338,7 +308,6 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 			if adjusted_height == 0.0:
 				adjusted_height = 0.01			
 				
-#			make_probe(probes, record.chrom, record.start, record.end, adjusted_height, 'coverage')
 			make_probe(probes, record.chrom, record.start, record.end, adjusted_height, 'coverage', record.coverage)
 
 			n += 1
@@ -357,7 +326,6 @@ def main():
 	group = parser.add_argument_group('Input')
 	group.add_argument('--genome',required=False, default=37, help='Human genome version. Use 37 for GRCh37/hg19, 38 for GRCh38 template.')
 	group.add_argument('--wisecondorx_aberrations', type=str, required=False,help='path to aberrations.bed file from WisecondorX')
-	group.add_argument('--bins',type=int,default=20,help='the number of coverage bins per probes default=20')
 	group.add_argument('--wisecondorx_cov', type=str, help='path to bins.bed file')
 	group.add_argument('--out',help='output file (default = the prefix of the input vcf)')
 	group.add_argument('--wcx_size',type=int,help='Variants smaller than this size will be filtered out')
@@ -399,9 +367,7 @@ def main():
 	chr_intervals = defaultdict(list)
 	n = 0
 
-	event_generator = wisecondorx_events(args, CONTIG_LENGTHS)
-
-	for event in event_generator:
+	for event in wisecondorx_events(args, CONTIG_LENGTHS):
 		end = event.end
 		height = ABERRATION_HEIGHTS[event.type]
 		make_segment(segmentation, event.chrom, event.start, end, height)
