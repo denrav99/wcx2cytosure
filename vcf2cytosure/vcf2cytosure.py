@@ -244,7 +244,7 @@ def group_by_chromosome(records):
 		yield prev_chrom, chromosome_records
 
 
-def add_coverage_probes(probes, args, CONTIG_LENGTHS):
+def add_coverage_probes(probes, args, CONTIG_LENGTHS, sample_id):
 	"""
 	probes -- <probes> element
 	path -- path to tab-separated file with coverages
@@ -269,7 +269,7 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 			make_probe(probes, record.chrom, record.start, record.end, adjusted_height, 'coverage', record.coverage)
 
 			n += 1
-	logger.info('Added %s coverage probes for %s', n, retrieve_sample_id(args.wisecondorx_aberrations))
+	logger.info('Added %s coverage probes for %s', n, sample_id)
 
 #retrieve the sample id, assuming single sample vcf
 def retrieve_sample_id(input_path):
@@ -342,12 +342,12 @@ def main():
 			make_probe(probes, event.chrom, pos, pos + 60, height, event.type)
 		n += 1
 	if args.wisecondorx_cov:
-		add_coverage_probes(probes, args, CONTIG_LENGTHS)
+		add_coverage_probes(probes, args, CONTIG_LENGTHS, sample_id)
 	else:
 		add_probes_between_events(probes, chr_intervals, CONTIG_LENGTHS)
 
 	tree.write(args.out, pretty_print=True)
-	logger.info('Wrote %d variants to CGH for %s', n, retrieve_sample_id(args.wisecondorx_aberrations))
+	logger.info('Wrote %d variants to CGH for %s', n, sample_id)
 
 
 if __name__ == '__main__':
