@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Convert structural variants in a VCF to CGH (CytoSure) format
+Convert structural variants in a WCX output to CGH (CytoSure) format
 """
 
 import argparse
@@ -51,39 +51,6 @@ def wisecondorx_events(args, CONTIG_LENGTHS):
 		yield Event(chrom=chrom, start=start, end=end, type=sv_type, info={})
 
 
-def strip_template(path):
-	"""
-	Read in the template CGH file and strip it of everything that we don't need.
-
-	Return the lxml.etree object.
-	"""
-	tree = etree.parse(path)
-
-	# Remove all aberrations
-	parent = tree.xpath('/data/cgh/submission')[0]
-	for aberration in parent.xpath('aberration'):
-		parent.remove(aberration)
-
-	# Remove all except the first probe (in the order in which they occur in
-	# the file) on each chromosome. Chromosomes without probes are not
-	# clickable in the CytoSure UI.
-	parent = tree.xpath('/data/cgh/probes')[0]
-	seen = set()
-	for probe in parent:
-		chrom = probe.attrib.get('chromosome')
-		if not chrom or chrom in seen:
-			parent.remove(probe)
-		else:
-			seen.add(chrom)
-
-	# Remove all segments
-	parent = tree.xpath('/data/cgh/segmentation')[0]
-	for segment in parent:
-		parent.remove(segment)
-
-	return tree
-
-
 def make_probe(parent, chromosome, start, end, height, text, original_coverage=None):
 	probe = etree.SubElement(parent, 'probe')
 	probe.attrib.update({
@@ -129,7 +96,7 @@ def make_segment(parent, chromosome, start, end, height):
 	return segment
 
 
-def make_aberration(parent, chromosome, start, end, comment=None, method='converted from VCF',
+def make_aberration(parent, chromosome, start, end, comment=None, method='converted from WCX',
 		confirmation=None, n_probes=0, copy_number=99):
 	"""
 	comment -- string
@@ -242,9 +209,6 @@ class CoverageRecord:
 		self.coverage = coverage
 
 def parse_wisecondorx_coverages(args):
-	probe_data=[]
-	opener=open
-	first=True
 	df = pd.read_csv(args.wisecondorx_cov, sep="\t", header=0)
 	
 	for _, row in df.iterrows():
@@ -287,17 +251,11 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 	"""
 	coverages = [r for r in parse_wisecondorx_coverages(args) if r.chrom in CONTIG_LENGTHS]
 
-	non_zero_len = len([r for r in coverages if r.coverage != 0])
-	mean_coverage = sum(r.coverage for r in coverages) / non_zero_len
-	logger.info('Mean coverage excluding 0 values is %.2f', mean_coverage)
-
 	n = 0
 	for chromosome, records in group_by_chromosome(coverages):
 		coverage_factor = 1
 				
 		for record in records:	
-			#print("#"+record.chrom,record.start)
-
 			height = record.coverage
 			adjusted_height = (record.coverage*10)
 #			adjusted_height=(((2**height)-1)* 100) / 10
@@ -311,10 +269,10 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS):
 			make_probe(probes, record.chrom, record.start, record.end, adjusted_height, 'coverage', record.coverage)
 
 			n += 1
-	logger.info('Added %s coverage probes', n)
+	logger.info('Added %s coverage probes for %s', n, retrieve_sample_id(args.wisecondorx_aberrations))
 
 #retrieve the sample id, assuming single sample vcf
-def retrieve_sample_id(input, input_path):
+def retrieve_sample_id(input_path):
 	sample = os.path.basename(input_path).split(".")[0]
     
 	return sample
@@ -327,7 +285,7 @@ def main():
 	group.add_argument('--genome',required=False, default=37, help='Human genome version. Use 37 for GRCh37/hg19, 38 for GRCh38 template.')
 	group.add_argument('--wisecondorx_aberrations', type=str, required=False,help='path to aberrations.bed file from WisecondorX')
 	group.add_argument('--wisecondorx_cov', type=str, help='path to bins.bed file')
-	group.add_argument('--out',help='output file (default = the prefix of the input vcf)')
+	group.add_argument('--out',help='output file (default = the prefix of the input bed)')
 	group.add_argument('--wcx_size',type=int,help='Variants smaller than this size will be filtered out')
 
 	group.add_argument('-V','--version',action='version',version="%(prog)s "+__version__ ,
@@ -349,13 +307,14 @@ def main():
 		CONTIG_LENGTHS = CONTIG_LENGTHS_37
 
 	if not args.out:
-		args.out=".".join(args.vcf.split(".")[0:len(args.vcf.split("."))-1])+".cgh"
+		prefix = os.path.basename(args.wisecondorx_aberrations).rsplit(".aberrations.bed", 1)[0]
+		args.out = f"{prefix}.cgh"
 	parser = etree.XMLParser(remove_blank_text=True)
 
 	sex_male = "false"
 	promega_sex = 'Female'
 
-	sample_id=retrieve_sample_id(None, args.wisecondorx_aberrations)
+	sample_id=retrieve_sample_id(args.wisecondorx_aberrations)
 
 	tree = etree.parse(StringIO(CGH_TEMPLATE.format(sample_id,sample_id,sample_id,sample_id,sex_male,promega_sex,sex_male)), parser)
 
@@ -388,7 +347,7 @@ def main():
 		add_probes_between_events(probes, chr_intervals, CONTIG_LENGTHS)
 
 	tree.write(args.out, pretty_print=True)
-	logger.info('Wrote %d variants to CGH', n)
+	logger.info('Wrote %d variants to CGH for %s', n, retrieve_sample_id(args.wisecondorx_aberrations))
 
 
 if __name__ == '__main__':
