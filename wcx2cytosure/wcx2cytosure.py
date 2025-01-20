@@ -271,7 +271,7 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS, sample_id):
 			n += 1
 	logger.info('Added %s coverage probes for %s', n, sample_id)
 
-#retrieve the sample id, assuming single sample vcf
+#retrieve the sample id
 def retrieve_sample_id(input_path):
 	sample = os.path.basename(input_path).split(".")[0]
     
