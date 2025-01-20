@@ -16,7 +16,7 @@ Requires an input .bins and .aberrations file from wisecondorx.
 	
     or use Singularity  
     
-    	singularity pull library://ravinale/ravinale/wcx2cytosure:latest
+    	singularity pull --arch amd64 library://ravinale/wcx2cytosure/wcx2cytosure2:latest
 
     RUNNING:
         
