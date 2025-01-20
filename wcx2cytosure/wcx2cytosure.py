@@ -279,7 +279,7 @@ def retrieve_sample_id(input_path):
 
 def main():
 	logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-	parser = argparse.ArgumentParser("VCF2cytosure - convert SV vcf files to cytosure")
+	parser = argparse.ArgumentParser("WCX2cytosure - convert WisecondorX files to cytosure format")
 
 	group = parser.add_argument_group('Input')
 	group.add_argument('--genome',required=False, default=37, help='Human genome version. Use 37 for GRCh37/hg19, 38 for GRCh38 template.')
@@ -293,7 +293,7 @@ def main():
 	# parser.add_argument('xml', help='CytoSure design file')
 	args= parser.parse_args()
 
-	logger.info('vcf2cytosure %s', __version__)
+	logger.info('wcx2cytosure %s', __version__)
 
 	if not args.wisecondorx_aberrations:
 		print("Provide variant file. --wisecondorx_aberrations. See -help")
