@@ -10,6 +10,7 @@ import os
 from collections import namedtuple, defaultdict
 from io import StringIO
 from lxml import etree
+import numpy as np
 
 from .constants import *
 
@@ -17,7 +18,7 @@ from .__version__ import __version__
 
 logger = logging.getLogger(__name__)
 
-Event = namedtuple('Event', ['chrom', 'start', 'end', 'type', 'info'])
+Event = namedtuple('Event', ['chrom', 'start', 'end', 'type', 'zscore', 'info'])
 
 def wisecondorx_events(args, CONTIG_LENGTHS):
 
@@ -32,7 +33,8 @@ def wisecondorx_events(args, CONTIG_LENGTHS):
 		start = int(variant["start"])
 		end = int(variant["end"])
 		sv_type =str(variant["type"])
-		
+		zscore =float(variant["zscore"])		
+
 		if sv_type=='loss':
 			sv_type='DEL'
 		elif sv_type=='gain':
@@ -48,9 +50,44 @@ def wisecondorx_events(args, CONTIG_LENGTHS):
 				continue		
 				
 		logger.debug('%s at %s:%s-%s (%s bp), Total skipped due to size: %s', sv_type, chrom, start+1, end, end - start, skipped)
-		yield Event(chrom=chrom, start=start, end=end, type=sv_type, info={})
+		yield Event(chrom=chrom, start=start, end=end, type=sv_type, zscore=zscore, info={})
 
+def parse_tiddit_coverage(args, AUTOSOMES):
+	
+	tiddit_coverage = pd.read_csv(args.tiddit_cov, sep="\t", header = 0)
+	autosomes_coverage = []
+	
+	for _, bin in tiddit_coverage.iterrows():
+		if bin["quality"] < 20:
+			continue	
+		
+		chrom = str(bin["#CHR"])
 
+		if chrom in AUTOSOMES:
+			autosomes_coverage.append(bin["coverage"])			
+	
+	autosomes_mean = np.mean(autosomes_coverage)
+
+	for _, bin in tiddit_coverage.iterrows():
+		if bin["quality"] < 20:
+			continue
+		
+		chrom = str(bin["#CHR"])
+		
+		if chrom == "Y":
+		
+			start = int(bin["start"])
+			end = int(bin["end"])
+			Y_cov =float(bin["coverage"])
+			coverage = Y_cov / autosomes_mean
+		
+				
+			yield CoverageRecord(chrom, start, end, coverage)
+		
+
+		else:
+			continue
+			
 def make_probe(parent, chromosome, start, end, height, text, original_coverage=None):
 	probe = etree.SubElement(parent, 'probe')
 	probe.attrib.update({
@@ -84,7 +121,7 @@ def make_probe(parent, chromosome, start, end, height, text, original_coverage=N
 	return probe
 
 
-def make_segment(parent, chromosome, start, end, height):
+def make_segment(parent, chromosome, start, end, height, zscore):
 	segment = etree.SubElement(parent, 'segment')
 	segment.attrib.update({
 		'chrId': CHROM_RENAME.get(chromosome, chromosome),
@@ -92,6 +129,7 @@ def make_segment(parent, chromosome, start, end, height):
 		'start': str(start + 1),
 		'stop': str(end),
 		'average': '{:.3f}'.format(-height),  # CytoSure inverts the sign
+		'zscore': str(zscore)
 	})
 	return segment
 
@@ -250,6 +288,7 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS, sample_id):
 	path -- path to tab-separated file with coverages
 	"""
 	coverages = [r for r in parse_wisecondorx_coverages(args) if r.chrom in CONTIG_LENGTHS]
+	Y_coverages = parse_tiddit_coverage(args, AUTOSOMES)
 
 	n = 0
 	for chromosome, records in group_by_chromosome(coverages):
@@ -271,6 +310,27 @@ def add_coverage_probes(probes, args, CONTIG_LENGTHS, sample_id):
 			n += 1
 	logger.info('Added %s coverage probes for %s', n, sample_id)
 
+	Y_n = 0
+
+	for Y_record in Y_coverages:
+	
+		coverage_factor = 1
+
+		height = record.coverage
+		adjusted_height = (record.coverage*10)
+
+		adjusted_height = min(MAX_HEIGHT, adjusted_height)
+		adjusted_height = max(MIN_HEIGHT, adjusted_height)
+
+		if adjusted_height == 0.0:
+			adjusted_height = 0.01
+
+		make_probe(probes, Y_record.chrom, Y_record.start, Y_record.end, adjusted_height, 'coverage', Y_record.coverage)
+
+		Y_n += 1
+	logger.info('Added %s coverage probes on Y for %s', Y_n, sample_id)
+
+
 #retrieve the sample id, assuming single sample vcf
 def retrieve_sample_id(input_path):
 	sample = os.path.basename(input_path).split(".")[0]
@@ -287,6 +347,7 @@ def main():
 	group.add_argument('--wisecondorx_cov', type=str, help='path to bins.bed file')
 	group.add_argument('--out',help='output file (default = the prefix of the input bed)')
 	group.add_argument('--wcx_size',type=int,help='Variants smaller than this size will be filtered out')
+	group.add_argument('--tiddit_cov', type=str, required=False, help='path to tiddit coverage file')
 
 	group.add_argument('-V','--version',action='version',version="%(prog)s "+__version__ ,
 			   help='Print program version and exit.')
@@ -329,7 +390,7 @@ def main():
 	for event in wisecondorx_events(args, CONTIG_LENGTHS):
 		end = event.end
 		height = ABERRATION_HEIGHTS[event.type]
-		make_segment(segmentation, event.chrom, event.start, end, height)
+		make_segment(segmentation, event.chrom, event.start, end, height, event.zscore)
 
 		comment = format_comment(event.info)
 
