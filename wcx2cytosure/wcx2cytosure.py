@@ -56,7 +56,8 @@ def parse_tiddit_coverage(args, AUTOSOMES):
 	
 	tiddit_coverage = pd.read_csv(args.tiddit_cov, sep="\t", header = 0)
 	autosomes_coverage = []
-	
+	y_coverage_records = []
+
 	for _, bin in tiddit_coverage.iterrows():
 		if bin["quality"] < 20:
 			continue	
@@ -65,28 +66,21 @@ def parse_tiddit_coverage(args, AUTOSOMES):
 
 		if chrom in AUTOSOMES:
 			autosomes_coverage.append(bin["coverage"])			
-	
+		elif chrom == "Y":
+			y_coverage_records.append(bin)	
+
+
 	autosomes_mean = np.mean(autosomes_coverage)
 
-	for _, bin in tiddit_coverage.iterrows():
-		if bin["quality"] < 20:
-			continue
-		
-		chrom = str(bin["#CHR"])
-		
-		if chrom == "Y":
-		
-			start = int(bin["start"])
-			end = int(bin["end"])
-			Y_cov =float(bin["coverage"])
-			coverage = Y_cov / autosomes_mean
+	for bin in y_coverage_records:
+		start = int(bin["start"])
+		end = int(bin["end"])
+		Y_cov =float(bin["coverage"])
+		coverage = Y_cov / autosomes_mean
 		
 				
-			yield CoverageRecord(chrom, start, end, coverage)
+		yield CoverageRecord("Y", start, end, coverage)
 		
-
-		else:
-			continue
 			
 def make_probe(parent, chromosome, start, end, height, text, original_coverage=None):
 	probe = etree.SubElement(parent, 'probe')
@@ -134,7 +128,7 @@ def make_segment(parent, chromosome, start, end, height, zscore):
 	return segment
 
 
-def make_aberration(parent, chromosome, start, end, comment=None, method='converted from WCX',
+def make_aberration(parent, chromosome, start, end, zscore, comment=None, method='converted from WCX',
 		confirmation=None, n_probes=0, copy_number=99):
 	"""
 	comment -- string
@@ -171,7 +165,8 @@ def make_aberration(parent, chromosome, start, end, comment=None, method='conver
 		logRatio='-0.4444',  # mean log ratio
 		p='0.003333',  # p-value
 		sd='0.2222',  # standard deviation
-	))
+		zscore=str(zscore)
+	))     
 	if comment:
 		e = etree.SubElement(aberration, 'comments')
 		e.text = comment
@@ -394,8 +389,8 @@ def main():
 
 		comment = format_comment(event.info)
 
-		make_aberration(submission, event.chrom, event.start, end, confirmation=event.type,
-			comment=comment)		
+		make_aberration(submission, event.chrom, event.start, end, event.zscore, confirmation=event.type,
+			comment=str(event.zscore))		
 
 		chr_intervals[event.chrom].append((event.start, event.end))
 		# show probes at slightly different height than segments
