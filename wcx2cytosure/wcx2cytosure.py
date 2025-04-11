@@ -56,18 +56,13 @@ def parse_tiddit_coverage(args, AUTOSOMES):
 	
 	tiddit_coverage = pd.read_csv(args.tiddit_cov, sep="\t", header = 0)
 	autosomes_coverage = []
-<<<<<<< HEAD
-	
-=======
 	y_coverage_records = []
 
->>>>>>> dev
 	for _, bin in tiddit_coverage.iterrows():
 		if bin["quality"] < 20:
 			continue	
 		
 		chrom = str(bin["#CHR"])
-<<<<<<< HEAD
 
 		if chrom in AUTOSOMES:
 			autosomes_coverage.append(bin["coverage"])			
