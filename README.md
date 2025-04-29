@@ -16,11 +16,11 @@ Requires an input .bins and .aberrations file from wisecondorx.
 	
     or use Singularity  
     
-    	singularity pull --arch amd64 library://ravinale/wcx2cytosure/wcx2cytosure2:latest
+    	singularity pull --arch amd64 library://ravinale/wcx2cytosure/wcx2cytosure:latest
 
     RUNNING:
         
-    wcx2cytosure --wisecondorx_cov  <input.bins.bed> --wisecondorx_aberrations <input.aberrations.bed> --out <output.cgh> --wcx_size <smallest aberration size (int)> (optional)
+    wcx2cytosure --wisecondorx_cov  <input.bins.bed> --wisecondorx_aberrations <input.aberrations.bed> --tiddit_cov <input.tiddit.tab> --out <output.cgh> --wcx_size <smallest aberration size (int)> (optional)
     
 ## Notes on the file format
 
@@ -45,7 +45,6 @@ Requires an input .bins and .aberrations file from wisecondorx.
 
 - Coordinates are 1-based (since stop - start = 59 and length of sequence is 60)
 - Removing the 'sequence' attribute does not work, but setting it to a fake one does
-- The log2 ratio is computed as log2(green/red)
 - Normalization segments look like this:
 
       <segment chrId="1" numProbes="10" start="7000" stop="1000000" average="-0.003"/>
